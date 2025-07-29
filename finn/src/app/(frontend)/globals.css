@@ -101,3 +101,15 @@ html[data-theme='dark'],
 html[data-theme='light'] {
   opacity: initial;
 }
+
+
+@keyframes font-animation {
+  0% { font-family: 'Arial', sans-serif; }
+  33% { font-family: 'Courier New', monospace; }
+  66% { font-family: 'Georgia', serif; }
+  100% { font-family: 'Arial', sans-serif; }
+}
+
+.animated-text {
+  animation: font-animation 6s infinite;
+}
