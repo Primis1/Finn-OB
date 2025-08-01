@@ -1,33 +1,41 @@
-# To use this Dockerfile, you have to set `output: 'standalone'` in your next.config.js file.
-# From https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
-
+# Stage 1: Base image for all subsequent builds
+# We're using a specific, stable Node.js version on an Alpine base for a small footprint.
 FROM node:22.12.0-alpine AS base
 
-# Install dependencies only when needed
+# Stage 2: Install dependencies including those needed for PostgreSQL
 FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat
+# Install essential packages required by Payload's dependencies, especially for `pg-native`
+# which needs to compile C++ code to connect to the PostgreSQL database.
+RUN apk add --no-cache libc6-compat g++ make python3
+
+# Set the working directory inside the container
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json ./
+# Copy and install dependencies based on the lockfile (pnpm is common for Payload)
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+
 RUN \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
   else echo "Lockfile not found." && exit 1; \
   fi
 
-
-# Rebuild the source code only when needed
+# Stage 3: Build the production application
 FROM base AS builder
 WORKDIR /app
+# Copy installed node_modules from the dependencies stage
 COPY --from=deps /app/node_modules ./node_modules
+# Copy all of the application's source code
 COPY . .
 
-# Next.js collects completely anonymous telemetry data about general usage.
-# Learn more here: https://nextjs.org/telemetry
-# Uncomment the following line in case you want to disable telemetry during the build.
-ENV NEXT_TELEMETRY_DISABLED 1
+# Next.js collects completely anonymous telemetry data.
+# Uncomment the following line in case you want to disable it.
+# ENV NEXT_TELEMETRY_DISABLED 1
 
+# Run the build command for your integrated Payload + Next.js app.
+# This assumes your `package.json` "build" script handles both the Payload build
+# (e.g., `payload build`) and the Next.js build (`next build`).
 RUN \
   if [ -f yarn.lock ]; then yarn run build; \
   elif [ -f package-lock.json ]; then npm run build; \
@@ -35,35 +43,33 @@ RUN \
   else echo "Lockfile not found." && exit 1; \
   fi
 
-# Production image, copy all the files and run next
+# Stage 4: Create the final, lightweight production image
 FROM base AS runner
 WORKDIR /app
 
+# Set production environment and disable Next.js telemetry if desired
 ENV NODE_ENV production
-# Uncomment the following line in case you want to disable telemetry during runtime.
-ENV NEXT_TELEMETRY_DISABLED 1
+# ENV NEXT_TELEMETRY_DISABLED 1
 
+# Create a non-root user for security best practices
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Remove this line if you do not have this folder
-COPY --from=builder /app/public ./public
+# Copy the entire built application from the builder stage
+# The `--chown` flag ensures the files are owned by our non-root user.
+COPY --from=builder --chown=nextjs:nodejs /app ./
 
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+# Set the correct permissions for the .next directory and any other cache files
+RUN chown -R nextjs:nodejs .next
 
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
+# Switch to the non-root user
 USER nextjs
 
+# Expose the port on which your server will run
 EXPOSE 3000
-
 ENV PORT 3000
 
-# server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
-CMD HOSTNAME="0.0.0.0" node server.js
+# The command to start your server.
+# This assumes your "start" script in `package.json` points to the correct entry file
+# of your combined Next.js + Payload server (e.g., `dist/server.js` or similar).
+CMD ["npm", "start"]
