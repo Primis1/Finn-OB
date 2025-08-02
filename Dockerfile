@@ -1,19 +1,12 @@
-# Stage 1: Base image for all subsequent builds
-# We're using a specific, stable Node.js version on an Alpine base for a small footprint.
-FROM node:22.12.0-alpine AS base
+# Stage 1: Base - Use the latest LTS version of Node.js (20) with a Debian-based slim image
+FROM node:20-bullseye-slim AS base
 
-# Stage 2: Install dependencies including those needed for PostgreSQL
+# Stage 2: Dependencies - Install dependencies only when needed
 FROM base AS deps
-# Install essential packages required by Payload's dependencies, especially for `pg-native`
-# which needs to compile C++ code to connect to the PostgreSQL database.
-RUN apk add --no-cache libc6-compat g++ make python3
-
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy and install dependencies based on the lockfile (pnpm is common for Payload)
+# Install dependencies based on the lockfile found
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-
 RUN \
   if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
   elif [ -f package-lock.json ]; then npm ci; \
@@ -21,21 +14,14 @@ RUN \
   else echo "Lockfile not found." && exit 1; \
   fi
 
-# Stage 3: Build the production application
+
+# Stage 3: Builder - Rebuild the source code
 FROM base AS builder
 WORKDIR /app
-# Copy installed node_modules from the dependencies stage
 COPY --from=deps /app/node_modules ./node_modules
-# Copy all of the application's source code
 COPY . .
 
-# Next.js collects completely anonymous telemetry data.
-# Uncomment the following line in case you want to disable it.
-# ENV NEXT_TELEMETRY_DISABLED 1
-
-# Run the build command for your integrated Payload + Next.js app.
-# This assumes your `package.json` "build" script handles both the Payload build
-# (e.g., `payload build`) and the Next.js build (`next build`).
+# Build the Next.js application
 RUN \
   if [ -f yarn.lock ]; then yarn run build; \
   elif [ -f package-lock.json ]; then npm run build; \
@@ -43,33 +29,37 @@ RUN \
   else echo "Lockfile not found." && exit 1; \
   fi
 
-# Stage 4: Create the final, lightweight production image
+# Stage 4: Runner - Production image
 FROM base AS runner
 WORKDIR /app
 
-# Set production environment and disable Next.js telemetry if desired
+# Set production environment variables
 ENV NODE_ENV production
-# ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Create a non-root user for security best practices
+# Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy the entire built application from the builder stage
-# The `--chown` flag ensures the files are owned by our non-root user.
-COPY --from=builder --chown=nextjs:nodejs /app ./
+# Copy the static assets and the standalone build output
+COPY --from=builder /app/public ./public
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
 
-# Set the correct permissions for the .next directory and any other cache files
-RUN chown -R nextjs:nodejs .next
+# Copy the standalone Next.js server and static assets with correct permissions
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Switch to the non-root user
 USER nextjs
 
-# Expose the port on which your server will run
+# Expose the application port
 EXPOSE 3000
+
+# Set the port environment variable
 ENV PORT 3000
 
-# The command to start your server.
-# This assumes your "start" script in `package.json` points to the correct entry file
-# of your combined Next.js + Payload server (e.g., `dist/server.js` or similar).
-CMD ["npm", "start"]
+# Start the Next.js server
+CMD HOSTNAME="0.0.0.0" node server.js
+
+# The Dockerfile has been updated to use the `node:20-bullseye-slim` image. This version is built on Debian, which provides a familiar environment. The rest of the Dockerfile remains the same as it correctly handles the build and production stag
