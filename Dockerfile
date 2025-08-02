@@ -37,9 +37,9 @@ COPY . .
 # Run the build command for your integrated Payload + Next.js app,
 # pointing Next.js to the `src` directory.
 RUN \
-  if [ -f yarn.lock ]; then yarn run build src; \
-  elif [ -f package-lock.json ]; then npm run build src; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build src; \
+  if [ -f yarn.lock ]; then yarn run build; \
+  elif [ -f package-lock.json ]; then npm run build; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
   else echo "Lockfile not found." && exit 1; \
   fi
 
