@@ -6,7 +6,7 @@ FROM node:22.12.0-alpine AS base
 FROM base AS deps
 # Install essential packages required by Payload's dependencies, especially for `pg-native`
 # which needs to compile C++ code to connect to the PostgreSQL database.
-# CHANGE: Added `nodejs` here as a fail-safe to ensure npm is available.
+# This also ensures Node.js and npm are available.
 RUN apk add --no-cache libc6-compat g++ make python3 nodejs
 
 # Set the working directory inside the container
@@ -15,30 +15,33 @@ WORKDIR /app
 # Copy the package.json and package-lock.json to install dependencies
 COPY package.json package-lock.json ./
 
-# CHANGE: Update npm to a newer version to better handle dependency conflicts.
-# This should fix the ERESOLVE error.
+# Update npm to a newer version to better handle dependency conflicts.
 RUN npm install -g npm@11.5.2
 
-# CHANGE: Using --legacy-peer-deps to force the installation.
-# This tells npm to ignore peer dependency conflicts like the one between
-# lucide-react and react.
+# Using --legacy-peer-deps to force the installation, as there's a conflict
+# between your project's React version and one of its dependencies.
 RUN npm install --legacy-peer-deps
 
 # Stage 3: Build the production application
 FROM base AS builder
 WORKDIR /app
-# Copy the entire application folder from the 'deps' stage.
-# This ensures a consistent file structure with all dependencies and source code.
-COPY --from=deps /app ./
+# COPY CHANGE: Copy the installed dependencies and then all other project files.
+# This ensures that your `src` directory is present for the build command.
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
 
 # Next.js collects completely anonymous telemetry data.
 # Uncomment the following line in case you want to disable it.
 # ENV NEXT_TELEMETRY_DISABLED 1
 
-# Run the build command for your integrated Payload + Next.js app.
-# This assumes your `package.json` "build" script handles both the Payload build
-# (e.g., `payload build`) and the Next.js build (`next build`).
-RUN npm run build
+# Run the build command for your integrated Payload + Next.js app,
+# pointing Next.js to the `src` directory.
+RUN \
+  if [ -f yarn.lock ]; then yarn run build src; \
+  elif [ -f package-lock.json ]; then npm run build src; \
+  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build src; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
 
 # Stage 4: Create the final, lightweight production image
 FROM base AS runner
