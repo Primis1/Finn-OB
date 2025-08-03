@@ -1,30 +1,24 @@
-# version: '3'
+version: '3.8'
 
-# services:
-#   payload:
-#     image: node:18-alpine
-#     ports:
-#       - '3000:3000'
-#     volumes:
-#       - .:/home/node/app
-#       - node_modules:/home/node/app/node_modules
-#     working_dir: /home/node/app/
-#     command: sh -c "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm dev"
-#     depends_on:
-#       - postgres
-#     env_file:
-#       - .env
+services:
+  # Your Next.js + Payload App Service
+  app:
+    build: .
+    container_name: my_payload_app
+    ports:
+      # Exposes your app's port 3000 to the host machine's port 3000
+      - "3000:3000"
+    environment:
+      # You must provide the full connection string to your separate database
+      - DATABASE_URL=${DATABASE_URL}
+      - PAYLOAD_SECRET=${PAYLOAD_SECRET}
+      # This should be your server's public domain name or IP
+      - NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
+    volumes:
+      # Maps the named volume 'payload_media' to the '/app/media' directory inside the container
+      - payload_media:/app/media
+    restart: unless-stopped
 
-#   # Uncomment the following to use postgres
-#   postgres:
-#     restart: always
-#     image: postgres:latest
-#     volumes:
-#       - pgdata:/var/lib/postgresql/data
-#     ports:
-#       - "5432:5432"
-
-# volumes:
-#   data:
-#   # pgdata:
-#   node_modules:
+# Top-level volumes definition where Docker will manage the persistent media data
+volumes:
+  payload_media:

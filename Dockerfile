@@ -1,41 +1,25 @@
-# Stage 1: Base image for all subsequent builds
-# We're using a specific, stable Node.js version on an Alpine base for a small footprint.
+
 FROM node:22.12.0-alpine AS base
 
-# Stage 2: Install dependencies including those needed for PostgreSQL
 FROM base AS deps
-# Install essential packages required by Payload's dependencies, especially for `pg-native`
-# which needs to compile C++ code to connect to the PostgreSQL database.
-# This also ensures Node.js and npm are available.
 RUN apk add --no-cache libc6-compat g++ make python3 nodejs
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy the package.json and package-lock.json to install dependencies
 COPY package.json package-lock.json ./
 
-# Update npm to a newer version to better handle dependency conflicts.
 RUN npm install -g npm@11.5.2
 
-# Using --legacy-peer-deps to force the installation, as there's a conflict
-# between your project's React version and one of its dependencies.
 RUN npm install --legacy-peer-deps
 
 # Stage 3: Build the production application
 FROM base AS builder
 WORKDIR /app
-# COPY CHANGE: Copy the installed dependencies and then all other project files.
-# This ensures that your `src` directory is present for the build command.
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Next.js collects completely anonymous telemetry data.
-# Uncomment the following line in case you want to disable it.
-# ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED 1
 
-# Run the build command for your integrated Payload + Next.js app,
-# pointing Next.js to the `src` directory.
 RUN \
   if [ -f yarn.lock ]; then yarn run build; \
   elif [ -f package-lock.json ]; then npm run build; \
@@ -61,6 +45,12 @@ COPY --from=builder --chown=nextjs:nodejs /app ./
 
 # Set the correct permissions for the .next directory and any other cache files
 RUN chown -R nextjs:nodejs .next
+
+# --- ADD THESE LINES --- #
+# Create the media directory and set ownership for the non-root user
+RUN mkdir -p /app/media
+RUN chown -R nextjs:nodejs /app/media
+# ----------------------- #
 
 # Switch to the non-root user
 USER nextjs
