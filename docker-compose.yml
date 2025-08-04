@@ -1,24 +1,50 @@
+# docker-compose.yml
+# This version is configured to run on HTTP, without SSL certificates.
+
 version: '3.8'
 
 services:
-  # Your Next.js + Payload App Service
+  # The Next.js + Payload app service.
+  # It will only be accessible internally via the Docker network.
   app:
     build: .
     container_name: my_payload_app
-    ports:
-      # Exposes your app's port 3000 to the host machine's port 3000
-      - "3000:3000"
     environment:
       # You must provide the full connection string to your separate database
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URI=${DATABASE_URI}
       - PAYLOAD_SECRET=${PAYLOAD_SECRET}
       # This should be your server's public domain name or IP
       - NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
     volumes:
-      # Maps the named volume 'payload_media' to the '/app/media' directory inside the container
       - payload_media:/app/media
+    networks:
+      - app-network
     restart: unless-stopped
 
-# Top-level volumes definition where Docker will manage the persistent media data
+  # The Nginx service will act as a reverse proxy.
+  # It is now configured for HTTP only.
+  nginx:
+    image: nginx:latest
+    container_name: nginx_reverse_proxy
+    ports:
+      # Expose port 80 for HTTP traffic
+      - "80:80"
+    volumes:
+      # Mount a new custom Nginx configuration file for HTTP
+      - ./nginx-http.conf:/etc/nginx/conf.d/default.conf
+      # The certs volume mount has been removed
+    networks:
+      - app-network
+    depends_on:
+      - app
+    restart: unless-stopped
+
+# Top-level volumes definition for persistent media data
 volumes:
   payload_media:
+
+# Define a network for the containers to communicate with each other
+networks:
+  app-network:
+    driver: bridge
+
