@@ -4,7 +4,7 @@ services:
   # Your Next.js + Payload App Service
   app:
     build: .
-    container_name: my_payload_app
+    container_name: finn-ob
     ports:
       # Exposes your app's port 3000 to the host machine's port 3000
       - "3000:3000"
