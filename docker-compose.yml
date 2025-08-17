@@ -1,24 +1,52 @@
 version: '3.8'
 
 services:
-  # Your Next.js + Payload App Service
   app:
     build: .
     container_name: finn-ob
     ports:
-      # Exposes your app's port 3000 to the host machine's port 3000
-      - "3000:3000"
+      - "3000"  # Internal only
     environment:
-      # You must provide the full connection string to your separate database
       - DATABASE_URL=${DATABASE_URL}
       - PAYLOAD_SECRET=${PAYLOAD_SECRET}
-      # This should be your server's public domain name or IP
-      - NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
+      - NEXT_PUBLIC_SERVER_URL=https://finn-ob.ca  # Update to HTTPS
     volumes:
-      # Maps the named volume 'payload_media' to the '/app/media' directory inside the container
       - payload_media:/app/media
     restart: unless-stopped
+    networks:
+      - app-network
 
-# Top-level volumes definition where Docker will manage the persistent media data
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/letsencrypt:/etc/letsencrypt
+      - ./nginx/html:/var/www/html
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - ./nginx/letsencrypt:/etc/letsencrypt
+      - ./nginx/html:/var/www/html
+    command: certonly --webroot --webroot-path=/var/www/html --email olafbaben@gmail.com --agree-tos --no-eff-email -d finn-ob.ca -d www.finn-ob.ca
+    depends_on:
+      - nginx
+    networks:
+      - app-network
+
 volumes:
   payload_media:
+
+networks:
+  app-network:
+    driver: bridge

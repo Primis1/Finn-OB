@@ -29,7 +29,7 @@ const nextConfig = {
       },
 
       {
-        hostnameL: "finn-ob.ca",
+        hostname: 'finn-ob.ca',
         protocol: 'http',
 
       }
