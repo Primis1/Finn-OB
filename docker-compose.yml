@@ -7,7 +7,7 @@ services:
     ports:
       - "3000"  # Internal only
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URI=${DATABASE_URI}
       - PAYLOAD_SECRET=${PAYLOAD_SECRET}
       - NEXT_PUBLIC_SERVER_URL=https://finn-ob.ca  # Update to HTTPS
     volumes:
