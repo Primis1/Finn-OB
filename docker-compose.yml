@@ -5,7 +5,7 @@ services:
     build: .
     container_name: finn-ob
     ports:
-      - "3000"  # Internal only
+      - "3000"
     environment:
       - DATABASE_URI=${DATABASE_URI}
       - PAYLOAD_SECRET=${PAYLOAD_SECRET}
