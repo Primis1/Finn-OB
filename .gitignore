@@ -6,7 +6,9 @@ node_modules
 .next
 .vercel
 
-
+nginx/letsencrypt/live/
+nginx/letsencrypt/archive/
+nginx/letsencrypt/renewal/
 
 # Payload default media upload directory
 
